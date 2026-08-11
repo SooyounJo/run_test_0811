@@ -1,0 +1,29 @@
+{
+  "_comment": "ComfyUI API 형식 workflow 템플릿. NODE_MAP 의 id 키와 노드 id 를 일치시키세요.",
+  "LOAD_IMAGE_COVER": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "CLIP_POSITIVE_MATERIAL": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": ["LOAD_CLIP", 1]
+    }
+  },
+  "TEXT_MULTILINE_TEXTURE": {
+    "class_type": "Text Multiline",
+    "inputs": {
+      "text": ""
+    }
+  },
+  "LOAD_CLIP": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "placeholder.safetensors",
+      "type": "stable_diffusion"
+    }
+  }
+}
