@@ -19,7 +19,8 @@
 1. 아카이브에서 표지 선택 → `image` (base64 data URL)
 2. 한글 **텍스처** 설명 → **번역** → `/api/refine` (`purpose: texture`) → EN 후보
 3. EN 옵션 버튼 중 하나 선택 → **Generate**
-4. `POST /api/runpod/run` → `buildRunPodInput({ mode: "texture", texturePrompt, image, imageName })`
+4. **이미지 업로드**: `POST /api/upload` → S3/R2에 업로드 → `https://...` URL 확보
+5. `POST /api/runpod/run` → `buildRunPodInput({ mode: "texture", texturePrompt, imageUrl, imageName })`
 
 ## RunPod Serverless worker 계약 (`input`)
 
@@ -27,7 +28,7 @@
 {
   "mode": "texture",
   "texture_prompt": "wood grain, brushed oak surface",
-  "image": "data:image/png;base64,...",
+  "image": "https://<public-url>/covers/....png",
   "image_name": "1976_example.png",
   "workflow": {}
 }
@@ -36,7 +37,9 @@
 - `workflow`는 `RUNPOD_INPUT_PROMPT_ONLY=0` 이고 repo에 export JSON이 있을 때만 Next가 붙입니다.
 - 기본(`RUNPOD_INPUT_PROMPT_ONLY=1` 또는 미설정)은 **프롬프트 필드만** 전송 → worker가 GitHub에 올린 API workflow로 노드를 패치해야 합니다.
 
-Worker는 `image`를 디코드해 Load Image에 넣고, `texture_prompt`를 텍스처 Text 노드에 넣은 뒤 Save Image 출력을 URL 또는 base64로 반환합니다.
+Worker는 `workflow["171"].inputs.url_or_path`에 들어간 **HTTPS URL**을 LoadImageFromUrlOrPath로 읽고,
+`workflow["147"].inputs.value`(키워드)와 `workflow["159"].inputs.noise_seed`(랜덤 시드)를 반영해 실행한 뒤,
+Save Image 출력을 URL 또는 base64로 반환합니다.
 
 ## 노드 id 수정
 

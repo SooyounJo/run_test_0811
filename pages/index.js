@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "@/styles/Home.module.css";
 
 const POLL_MS = 1500;
-const TIMEOUT_MS = 300000;
+// RunPod serverless는 큐 대기(콜드스타트/스로틀)로 5분 이상 걸릴 수 있음
+const TIMEOUT_MS = 900000;
 const NOTICE_AUTO_DISMISS_MS = 9000;
 /** RunPod Serverless: texture_prompt + 표지 (Comfy 텍스처 결합 워크플로) */
 const RUNPOD_PIPELINE_MODE = "texture";
@@ -39,6 +40,13 @@ function parseCoverYear(url) {
   return m ? Number(m[1]) : null;
 }
 
+function formatElapsed(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
 export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
@@ -57,6 +65,8 @@ export default function HomePage() {
   const [resultMeta, setResultMeta] = useState(null);
 
   const [statusText, setStatusText] = useState("");
+  const [waitSeconds, setWaitSeconds] = useState(0);
+  const [runpodInfo, setRunpodInfo] = useState(null);
   const [error, setError] = useState("");
   const [refineLoading, setRefineLoading] = useState(false);
   /** trimmedPrompt when EN prompts match current input */
@@ -67,6 +77,9 @@ export default function HomePage() {
   const refineAbortRef = useRef(null);
   const noticeTimerRef = useRef(null);
   const promptRef = useRef(null);
+  const waitStartRef = useRef(0);
+  const waitIntervalRef = useRef(null);
+  const runpodInfoRef = useRef("");
 
   const showTopNotice = useCallback((message, variant = "error") => {
     const text = String(message || "").trim();
@@ -90,6 +103,30 @@ export default function HomePage() {
 
   const isFocused = Boolean(selectedCatalogUrl);
   const isResultView = Boolean(resultImageUrl && resultMeta);
+  const isWaiting = Boolean(loading && !isResultView && String(statusText || "").includes("대기"));
+
+  useEffect(() => {
+    if (!isWaiting) {
+      window.clearInterval(waitIntervalRef.current);
+      waitIntervalRef.current = null;
+      waitStartRef.current = 0;
+      setWaitSeconds(0);
+      return;
+    }
+
+    if (waitIntervalRef.current) return;
+    waitStartRef.current = Date.now();
+    setWaitSeconds(0);
+    waitIntervalRef.current = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - waitStartRef.current) / 1000);
+      setWaitSeconds(elapsed);
+    }, 1000);
+
+    return () => {
+      window.clearInterval(waitIntervalRef.current);
+      waitIntervalRef.current = null;
+    };
+  }, [isWaiting]);
 
   const clearFocus = useCallback(() => {
     if (loading) return;
@@ -236,12 +273,24 @@ export default function HomePage() {
       });
       const texData = await texRes.json().catch(() => ({}));
       if (!texRes.ok) throw new Error(texData?.error || "텍스처 프롬프트 번역 실패");
+      const options = Array.isArray(texData?.options) ? texData.options.filter(Boolean) : [];
       const texturePromptEn = String(texData.refinedPrompt || "").trim();
       if (!texturePromptEn) throw new Error("텍스처 영어 프롬프트가 비어 있습니다.");
 
       if (signal.aborted) return;
-      setTextureOptions([{ id: "main", label: "입력 번역", text: texturePromptEn }]);
-      setSelectedTextureOptionId("main");
+      if (options.length) {
+        setTextureOptions(
+          options.map((o, i) => ({
+            id: String(o?.id || `opt${i + 1}`),
+            label: String(o?.label || `옵션 ${i + 1}`),
+            text: String(o?.text || "").trim()
+          }))
+        );
+        setSelectedTextureOptionId(String(options[0]?.id || "opt1"));
+      } else {
+        setTextureOptions([{ id: "main", label: "입력 번역", text: texturePromptEn }]);
+        setSelectedTextureOptionId("main");
+      }
       setRefinedForKey(trimmed);
     } catch (e) {
       if (signal.aborted) return;
@@ -280,6 +329,7 @@ export default function HomePage() {
     }
 
     const texturePromptEn = selectedTextureEn;
+    const imageName = selectedCatalogUrl ? selectedCatalogUrl.split("/").pop() : "";
 
     setLoading(true);
     setError("");
@@ -287,6 +337,8 @@ export default function HomePage() {
     setStatusText("");
     setResultImageUrl("");
     setResultMeta(null);
+    setRunpodInfo(null);
+    runpodInfoRef.current = "";
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -294,6 +346,23 @@ export default function HomePage() {
     const { signal } = controller;
 
     try {
+      setStatusText("이미지 업로드 중…");
+      let imageUrl = "";
+      if (String(selectedImage).startsWith("data:")) {
+        const upRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal,
+          body: JSON.stringify({ dataUrl: selectedImage, filename: imageName, folder: "covers" })
+        });
+        const upData = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) throw new Error(upData?.detail || upData?.error || "이미지 업로드 실패");
+        imageUrl = String(upData?.url || "").trim();
+        if (!imageUrl) throw new Error("업로드 URL을 받지 못했습니다.");
+      } else {
+        imageUrl = String(selectedImage);
+      }
+
       setStatusText("RunPod 전송 중…");
       const runRes = await fetch("/api/runpod/run", {
         method: "POST",
@@ -302,8 +371,8 @@ export default function HomePage() {
         body: JSON.stringify({
           mode: RUNPOD_PIPELINE_MODE,
           texturePrompt: texturePromptEn,
-          image: selectedImage,
-          imageName: selectedCatalogUrl ? selectedCatalogUrl.split("/").pop() : ""
+          imageUrl,
+          imageName
         })
       });
       const runData = await runRes.json().catch(() => ({}));
@@ -320,10 +389,23 @@ export default function HomePage() {
         if (!stRes.ok) throw new Error(stData?.detail || stData?.error || "상태 조회 실패");
 
         const jobStatus = String(stData?.status || "").toUpperCase();
+        const nextInfo = JSON.stringify({
+          jobStatus,
+          delayTime: stData?.delayTime ?? null,
+          executionTime: stData?.executionTime ?? null,
+          workerId: stData?.workerId ?? null
+        });
+        if (runpodInfoRef.current !== nextInfo) {
+          runpodInfoRef.current = nextInfo;
+          setRunpodInfo(JSON.parse(nextInfo));
+        }
         if (jobStatus === "COMPLETED") {
           const imgs = Array.isArray(stData?.images) ? stData.images.filter(Boolean) : [];
           if (!imgs.length) throw new Error("완료됐지만 이미지가 응답에 없습니다.");
           const sourceName = selectedCatalogUrl ? selectedCatalogUrl.split("/").pop() : "";
+          const generationSeconds = waitStartRef.current
+            ? Math.max(0, Math.floor((Date.now() - waitStartRef.current) / 1000))
+            : 0;
           setResultMeta({
             sourceName,
             sourceYear: parseCoverYear(selectedCatalogUrl),
@@ -331,7 +413,8 @@ export default function HomePage() {
             refinedTexturePrompt: texturePromptEn,
             textureOptionLabel:
               textureOptions.find((o) => o.id === selectedTextureOptionId)?.label || "",
-            pipelineLabel: PIPELINE_RESULT_LABEL
+            pipelineLabel: PIPELINE_RESULT_LABEL,
+            generationSeconds
           });
           setResultImageUrl(String(imgs[0]));
           setStatusText("완료");
@@ -346,7 +429,7 @@ export default function HomePage() {
         await sleep(POLL_MS);
       }
 
-      throw new Error("생성 시간이 초과되었습니다.");
+      throw new Error("생성 시간이 초과되었습니다. (RunPod 대기열이 길 수 있습니다)");
     } catch (e) {
       if (signal.aborted) return;
       const msg = String(e?.message || e);
@@ -486,7 +569,15 @@ export default function HomePage() {
               ) : null}
               {imageLoading ? <span className={styles.heroLoading}>불러오는 중…</span> : null}
               {loading && !isResultView ? (
-                <span className={styles.heroLoading}>{statusText || "생성 중…"}</span>
+                <div className={`${styles.heroLoading} ${styles.heroLoadingStack}`}>
+                  <span>{statusText || "생성 중…"}</span>
+                  {isWaiting ? (
+                    <span className={styles.waitCounter}>경과 {formatElapsed(waitSeconds)}</span>
+                  ) : null}
+                  {runpodInfo?.jobStatus ? (
+                    <span className={styles.waitCounter}>RunPod 상태: {runpodInfo.jobStatus}</span>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <aside className={`${styles.rightPanel} ${isResultView ? styles.rightPanelResult : ""}`}>
@@ -517,6 +608,12 @@ export default function HomePage() {
                         <dt>파이프라인</dt>
                         <dd>{resultMeta.pipelineLabel}</dd>
                       </div>
+                      {typeof resultMeta.generationSeconds === "number" ? (
+                        <div className={styles.resultRow}>
+                          <dt>소요 시간</dt>
+                          <dd>{formatElapsed(resultMeta.generationSeconds)}</dd>
+                        </div>
+                      ) : null}
                       <div className={styles.resultRow}>
                         <dt>텍스처 요청 (한글)</dt>
                         <dd>{resultMeta.userPrompt || "—"}</dd>

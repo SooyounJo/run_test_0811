@@ -24,6 +24,7 @@ export default async function handler(req, res) {
     prompt,
     texturePrompt,
     image,
+    imageUrl,
     imageName,
     mode = "texture",
     input: extraInput
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
       prompt,
       texturePrompt,
       image,
+      imageUrl,
       imageName
     });
 
@@ -43,11 +45,14 @@ export default async function handler(req, res) {
     }
 
     if (!isPromptOnlyInput()) {
+      const rawImgUrl = String(imageUrl || "").trim();
+      const isHttpUrl = /^https?:\/\//u.test(rawImgUrl);
       const workflow = await buildWorkflowPayload({
         mode: payloadInput.mode,
         prompt: payloadInput.prompt,
         texturePrompt: payloadInput.texture_prompt,
-        imageBase64: payloadInput.image
+        imageUrl: isHttpUrl ? rawImgUrl : undefined,
+        imageBase64: isHttpUrl ? undefined : payloadInput.image
       });
       if (workflow) payloadInput.workflow = workflow;
     }

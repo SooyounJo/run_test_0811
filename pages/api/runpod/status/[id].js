@@ -23,10 +23,16 @@ export default async function handler(req, res) {
     const output = st?.output ?? null;
     const error = st?.error ?? null;
     const images = normalizeImagesFromOutput(output);
+    const delayTime = st?.delayTime ?? st?.delay_time ?? null;
+    const executionTime = st?.executionTime ?? st?.execution_time ?? null;
+    const workerId = st?.workerId ?? st?.worker_id ?? null;
 
     return json(res, 200, {
       id,
       status: st?.status || "",
+      delayTime,
+      executionTime,
+      workerId,
       output,
       error,
       images

@@ -16,7 +16,7 @@
 
 .topNotice {
   position: fixed;
-  top: 12px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -35,7 +35,7 @@
 @keyframes noticeIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-8px);
+    transform: translateX(-50%) translateY(12px);
   }
   to {
     opacity: 1;
@@ -459,6 +459,18 @@
   padding: 8px 14px;
   border-radius: 999px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.heroLoadingStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.waitCounter {
+  font-size: 11px;
+  color: #737373;
 }
 
 .rightPanel {
