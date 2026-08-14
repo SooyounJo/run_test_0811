@@ -11,7 +11,7 @@
     calc(var(--cover-native-w) * var(--cover-focus-scale) * 1px),
     calc(94vh * var(--cover-native-w) / var(--cover-native-h))
   );
-  --sidebar-w: 240px;
+  --sidebar-w: 300px;
 }
 
 .topNotice {
@@ -481,7 +481,7 @@
   width: var(--sidebar-w);
   border-left: 1px solid #e8e8e8;
   background: #fafafa;
-  padding: 12px;
+  padding: 16px 28px;
   display: flex;
   flex-direction: column;
   gap: 10px;

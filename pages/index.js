@@ -12,7 +12,6 @@ const PIPELINE_RESULT_LABEL = "텍스처 결합";
 const STYLE_PRESETS = [
   { id: "wood", label: "나무", text: "나무 결, 원목 질감" },
   { id: "steel", label: "강철", text: "강철, 브러시드 메탈 표면" },
-  { id: "grass", label: "잔디", text: "잔디, 자연 turf 텍스처" },
   { id: "concrete", label: "콘크리트", text: "거친 콘크리트, 시멘트 질감" },
   { id: "marble", label: "대리석", text: "대리석 vein, polished stone" },
   { id: "fabric", label: "패브릭", text: "직물, 캔버스 천 질감" }
@@ -45,6 +44,16 @@ function formatElapsed(seconds) {
   const m = Math.floor(s / 60);
   const r = Math.floor(s % 60);
   return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function formatCoverTitle(urlOrName) {
+  const name = String(urlOrName || "").split("/").pop() || "";
+  const m = /^(\d{4})_(\d{2})(?:\D|$)/u.exec(name);
+  if (!m) return name;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (!year || !month) return name;
+  return `${year}년 ${month}월 작품`;
 }
 
 export default function HomePage() {
@@ -453,6 +462,7 @@ export default function HomePage() {
   ]);
 
   const selectedName = selectedCatalogUrl ? selectedCatalogUrl.split("/").pop() : "";
+  const selectedTitle = formatCoverTitle(selectedName);
   const heroSrc = isResultView ? "" : selectedCatalogUrl;
 
   const yearSliderIndex = useMemo(() => {
@@ -521,7 +531,7 @@ export default function HomePage() {
                 className={`${styles.gridTile} ${selectedCatalogUrl === url ? styles.active : ""}`}
                 onClick={() => handleCatalogSelect(url)}
                 disabled={loading || imageLoading}
-                title={url.split("/").pop()}
+                title={formatCoverTitle(url)}
               >
                 <img src={url} className={styles.gridImg} alt="" loading="lazy" />
               </button>
@@ -559,7 +569,7 @@ export default function HomePage() {
                   <img
                     className={styles.focusHeroImg}
                     src={heroSrc}
-                    alt={selectedName || "선택한 표지"}
+                    alt={selectedTitle || "선택한 표지"}
                     width={200}
                     height={270}
                     decoding="async"
@@ -590,13 +600,13 @@ export default function HomePage() {
                   <div className={styles.sidebarBlock}>
                     <p className={styles.sidebarLabel}>생성 완료</p>
                     <p className={styles.resultLead}>
-                      <strong>{resultMeta.sourceName || "표지"}</strong>
+                      <strong>{formatCoverTitle(resultMeta.sourceName) || "표지"}</strong>
                       에 선택한 텍스처를 결합했습니다.
                     </p>
                     <dl className={styles.resultSummary}>
                       <div className={styles.resultRow}>
                         <dt>원본 표지</dt>
-                        <dd>{resultMeta.sourceName || "—"}</dd>
+                        <dd>{formatCoverTitle(resultMeta.sourceName) || "—"}</dd>
                       </div>
                       {resultMeta.sourceYear ? (
                         <div className={styles.resultRow}>
@@ -636,7 +646,7 @@ export default function HomePage() {
                 </>
               ) : (
                 <>
-              {selectedName ? <p className={styles.metaLine}>{selectedName}</p> : null}
+              {selectedName ? <p className={styles.metaLine}>{selectedTitle}</p> : null}
 
               <div className={styles.sidebarBlock}>
                 <p className={styles.pipelineIntro}>텍스처(나무, 강철, 잔디 등)를 입력해 원본 표지에 결합해 보세요.</p>
